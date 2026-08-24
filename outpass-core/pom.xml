@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        PARENT
+        Spring Boot parent POM provides dependency management (versions),
+        plugin management, and sensible build defaults.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.passnikaal</groupId>
+    <artifactId>outpass-core</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>PassNikaal - Outpass Core</name>
+    <description>
+        Main backend service. Handles auth, outpass lifecycle, QR generation,
+        gate operations, and approval workflows. Runs as an HTTP server on port 8080.
+    </description>
+
+    <properties>
+        <java.version>17</java.version>
+        <!-- jjwt: Java JWT library for signing and verifying access tokens. -->
+        <jjwt.version>0.12.6</jjwt.version>
+        <!-- ZXing: Google library for QR code image generation. -->
+        <zxing.version>3.5.3</zxing.version>
+        <!-- AWS SDK v2 BOM version - governs all AWS module versions. -->
+        <aws.sdk.version>2.26.28</aws.sdk.version>
+    </properties>
+
+    <!--
+        DEPENDENCY MANAGEMENT
+        Import the AWS SDK v2 BOM (Bill of Materials) so all AWS modules
+        stay at compatible versions without specifying each version manually.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+
+        <!-- WEB LAYER: Embedded Tomcat + Spring MVC for all REST controllers. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- JPA + HIBERNATE: Spring Data JPA for all database access. HikariCP pool included. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- POSTGRESQL DRIVER: Runtime only. Hibernate uses JDBC interfaces at compile time. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+            SPRING SECURITY: Provides authentication, authorization, and CSRF.
+            All access rules live in SecurityConfig.java (SecurityFilterChain bean).
+            No @PreAuthorize annotations scattered in controllers.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- VALIDATION: Enables @Valid, @NotNull, @NotBlank, @Size on DTOs. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- MAIL: JavaMailSender for email verification and notification emails. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
+        <!--
+            JWT LIBRARY (jjwt) - three modules required:
+              jjwt-api:     Compile-time interfaces (what our code calls).
+              jjwt-impl:    Runtime signing/parsing logic.
+              jjwt-jackson: JSON serialization of JWT claims via Jackson.
+        -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+            QR CODE GENERATION (ZXing by Google) - two modules required:
+              core:   QR encoding and error-correction logic.
+              javase: Renders the QR code to a PNG byte array (for S3 upload).
+        -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>${zxing.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>javase</artifactId>
+            <version>${zxing.version}</version>
+        </dependency>
+
+        <!-- AWS SDK v2 - S3: Upload QR images on approval, stream them back on request. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+
+        <!-- LOMBOK: Generates boilerplate (getters/setters/constructors/builders) at compile time. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- TESTING: JUnit 5, Mockito, AssertJ, MockMvc. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- spring-security-test: SecurityMockMvc helpers for secured endpoint tests. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                spring-boot-maven-plugin:
+                Repackages the compiled JAR into an executable fat JAR.
+                Run locally with: mvn spring-boot:run
+                Build the fat JAR with: mvn clean package
+            -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- Exclude Lombok from the fat JAR - it is compile-time only. -->
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

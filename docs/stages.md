@@ -382,6 +382,63 @@ Stage 3 must be complete.
 - Expired or revoked refresh tokens are rejected with 401.
 - JWT filter correctly identifies the user on every subsequent request.
 - RBAC rules are defined in a single SecurityFilterChain, not scattered annotations.
+- Rate limiting returns 429 with Retry-After header when limits are breached.
+
+---
+
+## Stage 4a - Rate Limiting
+
+### Goal
+Add per-IP and per-user rate limiting to all API endpoints using Bucket4j.
+
+### Why
+Without rate limiting, the login endpoint can be brute-forced, the register endpoint can be spammed, and the gate endpoints can be flooded. This must be in place before any endpoint goes to production.
+
+### What will be built
+- Add `bucket4j-core` dependency to `outpass-core/pom.xml`.
+- `RateLimitInterceptor` — a Spring `HandlerInterceptor` that checks limits before any controller runs.
+- `RateLimitConfig` — defines all buckets and limit tiers as beans.
+- Register the interceptor in `WebMvcConfig`.
+
+### Files to be created
+
+```
+src/main/java/com/passnikaal/core/config/RateLimitConfig.java
+src/main/java/com/passnikaal/core/ratelimit/RateLimitInterceptor.java
+src/main/java/com/passnikaal/core/config/WebMvcConfig.java
+```
+
+### Limit tiers (see architecture.md §22a for full table)
+
+| Endpoints | Key | Limit |
+|---|---|---|
+| POST /auth/login, /register, /resend-verification | IP | 10 / 10 min |
+| POST /auth/refresh | IP | 30 / 10 min |
+| Student endpoints | userId | 60 / min |
+| Approver endpoints | userId | 120 / min |
+| Gate endpoints | userId | 300 / min |
+| Admin endpoints | userId | 60 / min |
+
+### APIs introduced
+None. Rate limiting is transparent — only failures produce a 429 response.
+
+### Database changes
+None.
+
+### Tests required
+- Hit /auth/login 11 times from same IP within 10 minutes -> 11th returns 429.
+- Verify 429 response includes `Retry-After` header.
+- Authenticated endpoint respects per-user limit, not per-IP.
+- Gate endpoint allows 300 req/min (guard scan speed not blocked).
+
+### Dependencies on previous stages
+Stage 4 must be complete (needs JWT filter to extract userId for per-user keying).
+
+### Definition of Done
+- All endpoints return 429 with standard error body when limit is exceeded.
+- `Retry-After` header is present on every 429 response.
+- Gate tier allows fast scanning without hitting limits.
+- Limits are configurable via application.properties without code changes.
 
 ---
 

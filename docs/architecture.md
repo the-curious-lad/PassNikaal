@@ -420,7 +420,6 @@ public enum Role {
 ```java
 public enum ApproverDesignation {
     WARDEN,
-    VICE_WARDEN,
     ASSISTANT_WARDEN,
     MMCA_OFFICER,
     AUTHORIZED_GUARD
@@ -1097,8 +1096,9 @@ aws.region=${AWS_REGION}
 |---|---|
 | Password storage | BCrypt (Spring Security default) |
 | JWT secret | Environment variable, never hardcoded |
-| JWT expiry | 24 hours (configurable) |
+| JWT expiry | Short-lived access token + 7-day refresh token (D-02) |
 | RBAC enforcement | Spring Security SecurityFilterChain, not scattered annotations |
+| Rate limiting | Bucket4j in-memory, per-IP (public) and per-user (authenticated) |
 | QR token | 256-bit cryptographically random via SecureRandom, stored in DB |
 | QR image access | Streamed via authenticated API, not publicly accessible |
 | S3 credentials | Environment variables or IAM role |
@@ -1108,6 +1108,56 @@ aws.region=${AWS_REGION}
 | CORS | Configure allowed origins explicitly, not wildcard in production |
 | HTTPS | Enforced at the load balancer level in production |
 | Account activation | Email verification token required before login |
+
+---
+
+## 22a. Rate Limiting
+
+### Library
+**Bucket4j** — in-memory token bucket algorithm. No Redis or external infrastructure needed for MVP. If the system scales to multiple instances later, Bucket4j supports a distributed backend (Hazelcast/Redis) with minimal code change.
+
+Add to outpass-core pom.xml (Stage 4):
+```xml
+<dependency>
+    <groupId>com.bucket4j</groupId>
+    <artifactId>bucket4j-core</artifactId>
+    <version>8.10.1</version>
+</dependency>
+```
+
+### Implementation
+A single Spring `HandlerInterceptor` (`RateLimitInterceptor`) reads the limit tier for the request, finds or creates the bucket for the key, and either allows or rejects with `429 Too Many Requests`.
+
+Two key types:
+- **IP-based** — for public endpoints where there is no authenticated user yet.
+- **User-based** — for authenticated endpoints, keyed on the `userId` from the JWT. Fairer than IP (students behind college NAT share one IP).
+
+### Limit Tiers
+
+| Tier | Endpoints | Key | Limit |
+|---|---|---|---|
+| **auth-strict** | POST /auth/login, POST /auth/register, POST /auth/resend-verification | IP | 10 requests / 10 minutes |
+| **auth-refresh** | POST /auth/refresh | IP | 30 requests / 10 minutes |
+| **student** | POST /outpasses, GET /outpasses/\* | userId | 60 requests / minute |
+| **approver** | POST /outpasses/\*/approve, POST /outpasses/\*/reject | userId | 120 requests / minute |
+| **gate** | POST /gate/exit, POST /gate/entry, GET /gate/lookup | userId | 300 requests / minute (guards scan fast) |
+| **admin** | /admin/\*\* | userId | 60 requests / minute |
+| **public** | GET /health | IP | 30 requests / minute |
+
+### Rate Limit Error Response
+```json
+{
+  "timestamp": "...",
+  "status": 429,
+  "error": "RATE_LIMIT_EXCEEDED",
+  "message": "Too many requests. Please wait before retrying.",
+  "path": "/api/v1/auth/login"
+}
+```
+Standard `Retry-After` header is included in the response so the client knows when to retry.
+
+### Why not Spring Cloud Gateway or a reverse proxy?
+For MVP on a single EC2, Bucket4j inside the application is simpler than configuring Nginx rate limiting or adding API Gateway. If horizontal scaling is needed later, the bucket store can be swapped to Redis.
 
 ---
 

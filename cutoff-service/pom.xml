@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        Keep the same Spring Boot version as outpass-core.
+        Both services share the same PostgreSQL database, so their
+        Hibernate versions must be compatible.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.passnikaal</groupId>
+    <artifactId>cutoff-service</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>PassNikaal - Cutoff Service</name>
+    <description>
+        Scheduled batch service. Runs the daily 9 PM market outpass cutoff:
+        marks APPROVED passes EXPIRED, EXITED passes NOT_RETURNED,
+        cleans up S3 QR images, and dispatches hostel confirmation emails.
+        This is NOT a web server (spring.main.web-application-type=none).
+    </description>
+
+    <properties>
+        <java.version>17</java.version>
+        <aws.sdk.version>2.26.28</aws.sdk.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+
+        <!--
+            SPRING BOOT BASE (no web server).
+            Provides Spring context, @Configuration, @Scheduled, @Value, etc.
+            We deliberately do NOT include spring-boot-starter-web because
+            this service has no HTTP endpoints.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <!--
+            JPA + HIBERNATE: Reads and updates the same PostgreSQL database
+            as outpass-core.
+
+            CRITICAL: spring.jpa.hibernate.ddl-auto=none must be set.
+            The cutoff-service must NEVER create or alter tables.
+            Schema ownership belongs to outpass-core.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- POSTGRESQL DRIVER: Runtime-only. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- MAIL: Sends hostel confirmation and reminder emails at 9 PM and beyond. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
+        <!-- AWS SDK v2 - S3: Batch-deletes obsolete QR images during 9 PM processing. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+
+        <!-- LOMBOK -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- TESTING -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
